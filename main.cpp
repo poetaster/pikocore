@@ -1,9 +1,9 @@
 // c++ include
 #include <stdio.h>
 #include <stdlib.h>
-
 #include <cmath>
 
+#define  DEBUG_BPM 1
 // pico files
 #include "hardware/adc.h"  // adc_read
 #include "hardware/clocks.h"
@@ -34,14 +34,14 @@
 #define NUM_KNOBS 3
 #define NUM_LEDS 8
 #define DISTORTION_MAX 30
-#define VOLUME_REDUCE_MAX 30
+#define VOLUME_REDUCE_MAX 10
 #define HEAD_SHIFT 10  // crossfade time in samples (2^HEAD_SHIFT)
-#define AUDIO_PIN 20   // audio out
+#define AUDIO_PIN 22   // audio out
 #ifdef PICO_DEFAULT_LED_PIN
 #define LED_PIN PICO_DEFAULT_LED_PIN
 #endif
-#define CLOCK_PIN 22  // clock in pin
-#define TRIGO_PIN 21  // trigger out pin
+#define CLOCK_PIN 17  // clock in pin
+#define TRIGO_PIN 16 // trigger out pin
 #define MAIN_LOOP_HZ 4
 #define MAIN_LOOP_DELAY 50
 
@@ -982,14 +982,39 @@ int main(void) {
   gpio_set_dir(23, GPIO_OUT);
   gpio_put(23, 0);
 
+
+/* button inputs
+#define BUTTON0  0 // key1 input on schematic
+#define BUTTON1	2
+#define BUTTON2	4
+#define BUTTON3	6
+#define BUTTON4 8
+#define BUTTON5	10
+#define BUTTON6	12
+#define BUTTON7 14  // for the Pico board
+#define SHIFTBUTTON 28 // was 24 USR button on VCC-GND boards
+
+#define LED0 1 // LED1 output on schematic
+#define LED1 3
+#define LED2 5
+#define LED3 7
+#define LED4 9
+#define LED5 11
+#define LED6 13
+#define LED7 15
+*/
   // initialize buttons
-  for (uint8_t i = 0; i < NUM_BUTTONS; i++) {
-    input_button[i].Init(i + 4, 10);  // GPIO 4 through 11 are buttons
+  input_button[0].Init(0, 10);  // GPIO 4 through 11 are buttons in original
+  input_button[8].Init(28, 10);  // GPIO 4 through 11 are buttons in original
+                                 
+  for (uint8_t i = 1; i < NUM_BUTTONS; i++) {
+    input_button[i].Init(i * 2, 10);  // GPIO 4 through 11 are buttons
   }
 
   // initialize knobs
   adc_init();
-  for (uint8_t i = 0; i < NUM_KNOBS; i++) {
+  //for (uint8_t i = 0; i < NUM_KNOBS; i++) {
+  for (uint8_t i = 0; i < 2 ; i++) {
     input_knob[i].Init(i, 50);
   }
 

@@ -5,9 +5,12 @@ class LEDArray {
 
  public:
   void Init() {
+    uint8_t n = 1;
+    // we have the leds interspersed.
     for (uint8_t i = 0; i < 8; i++) {
-      led[i].Init(i + 12);
+      led[i].Init(i + n);
       vals[i] = 0;
+      n++;
     }
     do_leds = 0;
   }

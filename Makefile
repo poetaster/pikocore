@@ -57,5 +57,3 @@ pico-sdk:
 	git clone https://github.com/raspberrypi/pico-sdk
 	cd pico-sdk && git submodule update --init
 
-debug:
-	sudo minicom -b 115200 -o -D /dev/ttyACM0

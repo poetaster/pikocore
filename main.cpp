@@ -30,8 +30,8 @@
 
 // constants
 #define CLOCK_RATE 264000
-#define NUM_BUTTONS 8
-#define NUM_KNOBS 3
+#define NUM_BUTTONS 9
+#define NUM_KNOBS 2
 #define NUM_LEDS 8
 #define DISTORTION_MAX 30
 #define VOLUME_REDUCE_MAX 10
@@ -1007,7 +1007,7 @@ int main(void) {
   input_button[0].Init(0, 10);  // GPIO 4 through 11 are buttons in original
   input_button[8].Init(28, 10);  // GPIO 4 through 11 are buttons in original
                                  
-  for (uint8_t i = 1; i < NUM_BUTTONS; i++) {
+  for (uint8_t i = 1; i < 8; i++) {
     input_button[i].Init(i * 2, 10);  // GPIO 4 through 11 are buttons
   }
 
@@ -1304,7 +1304,7 @@ int main(void) {
         for (uint8_t i = 0; i < NUM_KNOBS; i++) {
           input_knob[i].Read();
           if (input_knob[i].Changed() || first_time) {
-            if (i == 0) {
+            if (i == 0 && input_button[8].On()) {
               uint8_t selector_knob_before = selector_knob;
               selector_knob =
                   (input_knob[i].Value() * 8 / input_knob[i].ValueMax());
@@ -1326,7 +1326,7 @@ int main(void) {
                 first_time = false;
                 break;
               }
-            } else if (i == 1) {
+            } else if (i == 0 && ! input_button[8].On()) {
               ledarray_bar =
                   input_knob[i].Value() * 1000 / input_knob[i].ValueMax();
               ledarray_bar_debounce = 1;
@@ -1422,7 +1422,7 @@ int main(void) {
                 default:
                   break;
               }
-            } else if (i == 2) {
+            } else if (i == 1) {
               ledarray_bar =
                   input_knob[i].Value() * 1000 / input_knob[i].ValueMax();
               ledarray_bar_debounce = 2;

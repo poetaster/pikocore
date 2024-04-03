@@ -1300,36 +1300,36 @@ int main(void) {
           printf("\n");
         }
 #endif
-      }
-      for (uint8_t i = 0; i <3 ; i++) {
+        // selector / bpm logic with encoder pins
+
+        for (uint8_t i = 0; i <3 ; i++) {
           encoder_button[i].Read();
-      }
+        }
 
-      // selector / bpm logic with encoder pins
-      uint8_t selector_knob_before = selector_knob;
+        uint8_t selector_knob_before = selector_knob;
 
-      if (encoder_button[0].On() && encoder_button[1].ChangedHigh(true) )  {
+        if ( encoder_button[0].On() && encoder_button[1].ChangedHigh(true) )  {
            selector_knob = selector_knob - 1;
-           if (selector_knob < 0) selector_knob = 0;
-           if (selector_knob != selector_knob_before) {
-             ledarray_sel = selector_knob;
-             ledarray_sel_debounce = 16000;
-             ledarray_bar_debounce = 0;
-           }
-      }
-      if (encoder_button[0].On() && encoder_button[2].ChangedHigh(true) )  {
+           if (selector_knob < 0) selector_knob = 7;
+        }
+        if ( encoder_button[0].On() && encoder_button[2].ChangedHigh(true) )  {
            selector_knob = selector_knob + 1;
-           if (selector_knob > 7) selector_knob = 7;
-           if (selector_knob != selector_knob_before) {
-             ledarray_sel = selector_knob;
-             ledarray_sel_debounce = 16000;
-             ledarray_bar_debounce = 0;
+           if (selector_knob > 7) selector_knob = 0;
+        }
+        if ( selector_knob != selector_knob_before ) {
+         ledarray_sel = selector_knob;
+         ledarray_sel_debounce = 16000;
+         ledarray_bar_debounce = 0;
+         has_saved = false;
+         sequencer.SetRecording(false);
+           if (first_time) {
+            first_time = false;
            }
-      }
+        }
 
-      uint16_t bpm_set_new  = bpm_set;
+        uint16_t bpm_set_new  = bpm_set;
 
-      if ( ! encoder_button[0].On() && 
+        if ( ! encoder_button[0].On() && 
               clock_sync_ms > 60000 &&
               encoder_button[1].ChangedHigh(true) ) {
 
@@ -1337,8 +1337,8 @@ int main(void) {
                if (bpm_set_new < 60) {
                  bpm_set_new = 60;
                }
-      }
-      if ( ! encoder_button[0].On() && 
+        }
+        if ( ! encoder_button[0].On() && 
           clock_sync_ms > 60000 &&
           encoder_button[2].ChangedHigh(true) ) {
 
@@ -1346,9 +1346,9 @@ int main(void) {
           if (bpm_set_new > 360) {
              bpm_set_new = 360;
           }
-      }
+        }
 
-      if (bpm_set_new != bpm_set) {
+        if (bpm_set_new != bpm_set) {
            ledarray_binary_debounce = 48000;
            ledarray_binary_debounce = 48000;
            ledarray_binary = bpm_set_new - 50;
@@ -1356,8 +1356,8 @@ int main(void) {
            save_data[SAVE_BPM + 1] = (uint8_t)bpm_set_new;
            param_set_bpm(bpm_set_new, bpm_set, beat_thresh,
                                audio_clk_thresh);
+        }
       }
-
       // adc reading
       if (!btn_retrig) {
         for (uint8_t i = 0; i < NUM_KNOBS; i++) {
@@ -1378,13 +1378,14 @@ int main(void) {
               ledarray_sel = selector_knob;
               ledarray_sel_debounce = 16000;
               ledarray_bar_debounce = 0;
+              has_saved = false;
               sequencer.SetRecording(false);
               if (first_time) {
                 first_time = false;
                 break;
               }
             */
-            } else if (i == 0 && ! input_button[8].On()) {
+            } else if (i == 0 && ! encoder_button[0].On() ) {
               ledarray_bar =
                   input_knob[i].Value() * 1000 / input_knob[i].ValueMax();
               ledarray_bar_debounce = 1;
@@ -1480,7 +1481,7 @@ int main(void) {
                 default:
                   break;
               }
-            } else if (i == 1) {
+            } else if ( i == 1  && ! encoder_button[0].On() ) {
               ledarray_bar =
                   input_knob[i].Value() * 1000 / input_knob[i].ValueMax();
               ledarray_bar_debounce = 2;

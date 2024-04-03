@@ -274,8 +274,8 @@ func convertFiles(files []File) (err error) {
 		if lpf > 19000 {
 			lpf = 19000
 		}
-		log.Tracef("%s", strings.Join([]string{"sox", f.Pathname, "-r", fmt.Sprint(int(flagSR)), "-c", "1", "-b", "8", f.Converted, "speed", fmt.Sprintf("%2.6f", flagBPM/f.BPM), "lowpass", fmt.Sprint(lpf), "norm", "gain", "-6"}, " "))
-		cmd := exec.Command("sox", f.Pathname, "-r", fmt.Sprint(int(flagSR)), "-c", "1", "-b", "8", f.Converted, "speed", fmt.Sprintf("%2.6f", flagBPM/f.BPM), "highpass", "5", "lowpass", fmt.Sprint(lpf), "gain", "-6", "norm", "-3", "dither")
+		log.Tracef("%s", strings.Join([]string{"sox", f.Pathname, "-r", fmt.Sprint(int(flagSR)), "-c", "1", "-b", "8", f.Converted, "speed", fmt.Sprintf("%2.6f", flagBPM/f.BPM), "lowpass", fmt.Sprint(lpf), "norm", "gain", "-1"}, " "))
+		cmd := exec.Command("sox", f.Pathname, "-r", fmt.Sprint(int(flagSR)), "-c", "1", "-b", "8", f.Converted, "speed", fmt.Sprintf("%2.6f", flagBPM/f.BPM), "highpass", "5", "lowpass", fmt.Sprint(lpf), "gain", "-1", "norm", "-3", "dither")
 		stdoutStderr, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Errorf("cmd failed: \n%s", stdoutStderr)

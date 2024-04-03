@@ -30,7 +30,7 @@
 
 // constants
 #define CLOCK_RATE 264000
-#define NUM_BUTTONS 9
+#define NUM_BUTTONS 8 // we add the encoder inputs
 #define NUM_KNOBS 2
 #define NUM_LEDS 8
 #define DISTORTION_MAX 30
@@ -71,6 +71,7 @@ const uint8_t *flash_target_contents =
 
 // inputs
 Button input_button[NUM_BUTTONS];
+Button encoder_button[3];
 Knob input_knob[NUM_KNOBS];
 
 // outputs
@@ -312,7 +313,7 @@ void pwm_interrupt_handler() {
     }
 
     // check button 1
-    if (button_on < NUM_BUTTONS) {
+    if (button_on < NUM_BUTTONS - 3) {
       if (!input_button[button_on].On()) {
         // button is off
         button_on = NUM_BUTTONS;
@@ -328,9 +329,9 @@ void pwm_interrupt_handler() {
         }
       }
     } else if (do_mute_debounce == 0) {
-      for (uint8_t i = 0; i < NUM_BUTTONS; i++) {
+      for (uint8_t i = 0; i < NUM_BUTTONS - 3; i++) {
         if (input_button[i].On()) {
-          if (button_on >= NUM_BUTTONS) {
+          if (button_on >= NUM_BUTTONS - 3 ) {
             select_beat_freeze = (select_beat / NUM_BUTTONS) * NUM_BUTTONS;
           }
           button_on = i;
@@ -344,17 +345,17 @@ void pwm_interrupt_handler() {
     }
 
     // check button 2
-    if (button_on2 < NUM_BUTTONS) {
+    if (button_on2 < NUM_BUTTONS - 3) {
       if (!input_button[button_on2].On()) {
-        button_on2 = NUM_BUTTONS;
+        button_on2 = NUM_BUTTONS - 3;
         button_filter_on = false;
       }
     }
     if (!btn_retrig) {
       // check button 2
-      if (button_on < NUM_BUTTONS && do_mute_debounce == 0) {
+      if (button_on < NUM_BUTTONS - 3 && do_mute_debounce == 0) {
         // 1st button pressed, check for second button
-        for (uint8_t i = 0; i < NUM_BUTTONS; i++) {
+        for (uint8_t i = 0; i < NUM_BUTTONS - 3; i++) {
           if (i == button_on) {
             continue;
           }
@@ -398,7 +399,7 @@ void pwm_interrupt_handler() {
         // if (retrig_sel == 4) {
         //   retrig_sel = 5;
         // }
-        if (button_on2 >= NUM_BUTTONS) {
+        if (button_on2 >= NUM_BUTTONS -3) {
           retrig_sel = randint(2, 16);
         } else {
           switch (button_on2) {
@@ -1005,11 +1006,12 @@ int main(void) {
 */
   // initialize buttons
   input_button[0].Init(0, 10);  // GPIO 4 through 11 are buttons in original
-  input_button[8].Init(28, 10);  // GPIO 4 through 11 are buttons in original
-                                 
   for (uint8_t i = 1; i < 8; i++) {
     input_button[i].Init(i * 2, 10);  // GPIO 4 through 11 are buttons
   }
+  encoder_button[0].Init(28, 10);  //  encoder button
+  encoder_button[1].Init(18, 10);  //  these are actually encoder inputs
+  encoder_button[2].Init(19, 10);  //  but they go high and low ;)
 
   // initialize knobs
   adc_init();
@@ -1241,7 +1243,7 @@ int main(void) {
 
     if (clock_ms % 16 == 0) {  // 250 Hz
       // read gpio inputs
-      for (uint8_t i = 0; i < NUM_BUTTONS; i++) {
+      for (uint8_t i = 0; i < NUM_BUTTONS ; i++) {
         if (midi_button1 != i && midi_button2 != i) {
           input_button[i].Read();
         }
@@ -1285,6 +1287,7 @@ int main(void) {
             printf("switching do mute: %d\n", do_mute);
           }
         }
+
 #ifdef DEBUG_BUTTONS
         if (input_button[i].Changed(false)) {
           printf("[%6d] %d: %d", clock_ms, i, input_button[i].On());
@@ -1298,6 +1301,62 @@ int main(void) {
         }
 #endif
       }
+      for (uint8_t i = 0; i <3 ; i++) {
+          encoder_button[i].Read();
+      }
+
+      // selector / bpm logic with encoder pins
+      uint8_t selector_knob_before = selector_knob;
+
+      if (encoder_button[0].On() && encoder_button[1].ChangedHigh(true) )  {
+           selector_knob = selector_knob - 1;
+           if (selector_knob < 0) selector_knob = 0;
+           if (selector_knob != selector_knob_before) {
+             ledarray_sel = selector_knob;
+             ledarray_sel_debounce = 16000;
+             ledarray_bar_debounce = 0;
+           }
+      }
+      if (encoder_button[0].On() && encoder_button[2].ChangedHigh(true) )  {
+           selector_knob = selector_knob + 1;
+           if (selector_knob > 7) selector_knob = 7;
+           if (selector_knob != selector_knob_before) {
+             ledarray_sel = selector_knob;
+             ledarray_sel_debounce = 16000;
+             ledarray_bar_debounce = 0;
+           }
+      }
+
+      uint16_t bpm_set_new  = bpm_set;
+
+      if ( ! encoder_button[0].On() && 
+              clock_sync_ms > 60000 &&
+              encoder_button[1].ChangedHigh(true) ) {
+
+                 bpm_set_new  = bpm_set - 1;
+               if (bpm_set_new < 60) {
+                 bpm_set_new = 60;
+               }
+      }
+      if ( ! encoder_button[0].On() && 
+          clock_sync_ms > 60000 &&
+          encoder_button[2].ChangedHigh(true) ) {
+
+          bpm_set_new  = bpm_set + 1;
+          if (bpm_set_new > 360) {
+             bpm_set_new = 360;
+          }
+      }
+
+      if (bpm_set_new != bpm_set) {
+           ledarray_binary_debounce = 48000;
+           ledarray_binary_debounce = 48000;
+           ledarray_binary = bpm_set_new - 50;
+           save_data[SAVE_BPM] = (uint8_t)(bpm_set_new >> 8);
+           save_data[SAVE_BPM + 1] = (uint8_t)bpm_set_new;
+           param_set_bpm(bpm_set_new, bpm_set, beat_thresh,
+                               audio_clk_thresh);
+      }
 
       // adc reading
       if (!btn_retrig) {
@@ -1305,12 +1364,10 @@ int main(void) {
           input_knob[i].Read();
           if (input_knob[i].Changed() || first_time) {
             if (i == 0 && input_button[8].On()) {
+               /*
               uint8_t selector_knob_before = selector_knob;
               selector_knob =
                   (input_knob[i].Value() * 8 / input_knob[i].ValueMax());
-#ifdef DEBUG_KNOB
-              printf("%d: %d; \n", i, input_knob[i].Value());
-#endif
               if (selector_knob != selector_knob_before) {
                 has_saved = false;
                 for (uint8_t j = 1; j < NUM_KNOBS; j++) {
@@ -1326,6 +1383,7 @@ int main(void) {
                 first_time = false;
                 break;
               }
+            */
             } else if (i == 0 && ! input_button[8].On()) {
               ledarray_bar =
                   input_knob[i].Value() * 1000 / input_knob[i].ValueMax();

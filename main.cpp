@@ -144,7 +144,7 @@ uint8_t retrig_filter_change = 0;
 int8_t retrig_pitch_change = 0;
 uint8_t retrig_volume_reduce = 0;
 uint8_t button_on = NUM_BUTTONS;
-uint8_t button_on2 = 3;
+uint8_t button_on2 = NUM_BUTTONS;
 uint8_t button_filter = 0;
 bool button_filter_on = false;
 uint8_t retrig_volume_reduce_change = 0;
@@ -313,7 +313,7 @@ void pwm_interrupt_handler() {
     }
 
     // check button 1
-    if (button_on < NUM_BUTTONS - 3) {
+    if (button_on < NUM_BUTTONS) {
       if (!input_button[button_on].On()) {
         // button is off
         button_on = NUM_BUTTONS;
@@ -329,9 +329,9 @@ void pwm_interrupt_handler() {
         }
       }
     } else if (do_mute_debounce == 0) {
-      for (uint8_t i = 0; i < NUM_BUTTONS - 3; i++) {
+      for (uint8_t i = 0; i < NUM_BUTTONS; i++) {
         if (input_button[i].On()) {
-          if (button_on >= NUM_BUTTONS - 3 ) {
+          if (button_on >= NUM_BUTTONS ) {
             select_beat_freeze = (select_beat / NUM_BUTTONS) * NUM_BUTTONS;
           }
           button_on = i;
@@ -345,15 +345,15 @@ void pwm_interrupt_handler() {
     }
 
     // check button 2
-    if (button_on2 < NUM_BUTTONS - 3) {
+    if (button_on2 < NUM_BUTTONS) {
       if (!input_button[button_on2].On()) {
-        button_on2 = NUM_BUTTONS - 3;
+        button_on2 = NUM_BUTTONS ;
         button_filter_on = false;
       }
     }
     if (!btn_retrig) {
       // check button 2
-      if (button_on < NUM_BUTTONS - 3 && do_mute_debounce == 0) {
+      if (button_on < NUM_BUTTONS && do_mute_debounce == 0) {
         // 1st button pressed, check for second button
         for (uint8_t i = 0; i < NUM_BUTTONS - 3; i++) {
           if (i == button_on) {
@@ -399,7 +399,7 @@ void pwm_interrupt_handler() {
         // if (retrig_sel == 4) {
         //   retrig_sel = 5;
         // }
-        if (button_on2 >= NUM_BUTTONS -3) {
+        if (button_on2 >= NUM_BUTTONS) {
           retrig_sel = randint(2, 16);
         } else {
           switch (button_on2) {
@@ -1302,62 +1302,79 @@ int main(void) {
 #endif
         // selector / bpm logic with encoder pins
 
-        for (uint8_t i = 0; i <3 ; i++) {
+       for (uint8_t i = 0; i <3 ; i++) {
           encoder_button[i].Read();
-        }
+       }
+        
 
         uint8_t selector_knob_before = selector_knob;
 
-        if ( encoder_button[0].On() && encoder_button[1].ChangedHigh(true) )  {
+        if ( encoder_button[0].On() && 
+                encoder_button[2].ChangedHigh(true) &&
+                ! encoder_button[1].ChangedHigh(true) 
+                //encoder_button[1].Falling() &&
+                //! encoder_button[2].Rising() 
+           )  {
+           selector_knob = selector_knob + 1;
+           if (selector_knob > 7) selector_knob = 0;
+        } else if ( encoder_button[0].On() && 
+                encoder_button[1].ChangedHigh(true) &&
+                ! encoder_button[2].ChangedHigh(true) 
+                //encoder_button[2].Falling() &&
+                //! encoder_button[1].Rising() 
+           )  {
            selector_knob = selector_knob - 1;
            if (selector_knob < 0) selector_knob = 7;
         }
-        if ( encoder_button[0].On() && encoder_button[2].ChangedHigh(true) )  {
-           selector_knob = selector_knob + 1;
-           if (selector_knob > 7) selector_knob = 0;
-        }
         if ( selector_knob != selector_knob_before ) {
-         ledarray_sel = selector_knob;
-         ledarray_sel_debounce = 16000;
-         ledarray_bar_debounce = 0;
-         has_saved = false;
-         sequencer.SetRecording(false);
-           if (first_time) {
+          ledarray_sel = selector_knob;
+          ledarray_sel_debounce = 7000;
+          ledarray_bar_debounce = 0;
+          has_saved = false;
+          sequencer.SetRecording(false);
+          if (first_time) {
             first_time = false;
-           }
+          }
         }
 
         uint16_t bpm_set_new  = bpm_set;
 
         if ( ! encoder_button[0].On() && 
-              clock_sync_ms > 60000 &&
-              encoder_button[1].ChangedHigh(true) ) {
-
-                 bpm_set_new  = bpm_set - 1;
-               if (bpm_set_new < 60) {
-                 bpm_set_new = 60;
-               }
-        }
-        if ( ! encoder_button[0].On() && 
-          clock_sync_ms > 60000 &&
-          encoder_button[2].ChangedHigh(true) ) {
+             clock_sync_ms > 60000 &&
+             encoder_button[1].ChangedHigh(true) &&
+             ! encoder_button[2].ChangedHigh(true)
+             //encoder_button[1].Falling() &&
+             //encoder_button[2].Rising()
+           ) {
+           bpm_set_new  = bpm_set - 1;
+           if (bpm_set_new < 60) {
+               bpm_set_new = 360;
+           }
+        } else if ( ! encoder_button[0].On() && 
+                   clock_sync_ms > 60000 &&
+                   encoder_button[2].ChangedHigh(true)  &&
+                   ! encoder_button[1].ChangedHigh(true)
+                   //encoder_button[2].Falling() &&
+                   //encoder_button[1].Rising()
+           ) {
 
           bpm_set_new  = bpm_set + 1;
           if (bpm_set_new > 360) {
-             bpm_set_new = 360;
+              bpm_set_new = 60;
           }
         }
 
         if (bpm_set_new != bpm_set) {
-           ledarray_binary_debounce = 48000;
-           ledarray_binary_debounce = 48000;
+           ledarray_binary_debounce = 10000;
            ledarray_binary = bpm_set_new - 50;
            save_data[SAVE_BPM] = (uint8_t)(bpm_set_new >> 8);
            save_data[SAVE_BPM + 1] = (uint8_t)bpm_set_new;
+
            param_set_bpm(bpm_set_new, bpm_set, beat_thresh,
                                audio_clk_thresh);
         }
       }
+
       // adc reading
       if (!btn_retrig) {
         for (uint8_t i = 0; i < NUM_KNOBS; i++) {

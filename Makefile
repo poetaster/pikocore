@@ -43,7 +43,7 @@ endif
 audio:
 	cd audio2h && rm -rf converted
 	cd audio2h && mkdir converted
-	cd audio2h && go run main.go --limit 1 --bpm 165 --sr 33000 --folder-in demo
+	cd audio2h && go run main.go --limit 8 --bpm 165 --sr 33000 --folder-in demo
 
 clean:
 	rm -rf build

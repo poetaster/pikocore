@@ -11,7 +11,10 @@
 #include "hardware/irq.h"    // interrupts
 #include "hardware/pwm.h"    // pwm
 #include "hardware/sync.h"   // wait for interrupt
+#include "hardware/pio.h"    // pio for encoder / etc
 #include "pico/stdlib.h"     // stdlib
+#include "pico/multicore.h" // multicore support
+#include "quadrature_encoder.pio.h" // used on core1 for encoder reading.
 
 // pikocore files
 #include "doth/audio2h.h"
@@ -65,6 +68,41 @@
 #define SAVE_PROB_JUMP 10
 #define SAVE_PROB_GATE 11
 #define SAVE_PROB_TUNNEL 12
+
+// these were in the main core main, but we need em for the second core
+// initialize save data
+  uint8_t save_data[FLASH_PAGE_SIZE];
+  // initialize control loop variables
+  uint32_t clock_ms = 0;
+  uint32_t bpm_input = 165;
+  uint32_t clock_hits = 0;
+  uint32_t clock_sync_ms = 0;
+  uint16_t alpha0 = 500;
+  uint8_t selector_knob = 0;
+  uint16_t ledarray_bar = 0;
+  uint32_t ledarray_bar_debounce = 0;
+  uint16_t ledarray_sel = 0;
+  uint32_t ledarray_sel_debounce = 0;
+  uint16_t ledarray_save = 0;
+  uint16_t ledarray_load = 0;
+  uint32_t ledarray_binary_debounce = 0;
+  uint8_t ledarray_binary = 0;
+
+  // debouncing
+  uint16_t debounce_sample = 0;
+  uint16_t debounce_lock_clock = 0;
+  uint16_t debounce_reset_fx = 0;
+  uint32_t debounce_saving = 0;
+  uint32_t debounce_led_save = 0;
+  uint8_t debounce_led_sequencer = 0;
+  uint8_t debounce_led_load = 0;
+  uint8_t clock_pin_last = 0;
+  uint8_t last_button_on = NUM_BUTTONS;
+  bool has_saved = false;
+  bool do_load = false;
+  bool first_time = false;
+  bool has_loaded = false;
+
 
 const uint8_t *flash_target_contents =
     (const uint8_t *)(XIP_BASE + FLASH_TARGET_OFFSET);
@@ -936,12 +974,85 @@ void midi_timing() {
 }
 #endif
 
+void core1_main() {
+    // encoder pio foo
+    int new_value, delta = 0, old_value = 0;
+    const uint PIN_AB = 18;
+    PIO pio = pio0;
+    const uint sm = 0;
+    pio_add_program(pio, &quadrature_encoder_program);
+    quadrature_encoder_program_init(pio, sm, PIN_AB, 0);
+
+    // selector / bpm logic with encoder pins
+    while(1) {
+
+       //for (uint8_t i = 0; i <1 ; i++) {
+       //   encoder_button[i].Read();
+       //}
+       encoder_button[0].Read();
+
+       new_value = quadrature_encoder_get_count(pio, sm);
+       delta = new_value - old_value;
+       old_value = new_value;
+
+        bool selected = false;
+        uint8_t selector_knob_before = selector_knob;
+
+        if ( encoder_button[0].On() && delta != 0)  {
+           selector_knob = selector_knob + delta;
+           if (selector_knob > 7) selector_knob = 0;
+           if (selector_knob < 0) selector_knob = 7;
+           selected = true;
+           printf("selector - %d V\n", selector_knob);
+        }
+
+        if ( selector_knob != selector_knob_before ) {
+          ledarray_sel = selector_knob;
+          ledarray_sel_debounce = 16000;
+          ledarray_bar_debounce = 0;
+          has_saved = false;
+          sequencer.SetRecording(false);
+          if (first_time) {
+            first_time = false;
+          }
+        }
+
+        uint16_t bpm_set_new  = bpm_set;
+
+        if ( selected == false && ! encoder_button[0].On() &&
+             clock_sync_ms > 60000 && delta != 0) {
+           bpm_set_new  = bpm_set + delta;
+           if (bpm_set_new < 60) {
+               bpm_set_new = 360;
+           }
+           if (bpm_set_new > 360) {
+              bpm_set_new = 60;
+           }
+           printf("bpm Value - %d V\n", bpm_set_new);
+           selected = true;
+        }
+
+        if (bpm_set_new != bpm_set) {
+           ledarray_binary_debounce = 10000;
+           ledarray_binary = bpm_set_new - 50;
+           save_data[SAVE_BPM] = (uint8_t)(bpm_set_new >> 8);
+           save_data[SAVE_BPM + 1] = (uint8_t)bpm_set_new;
+
+           param_set_bpm(bpm_set_new, bpm_set, beat_thresh,
+                               audio_clk_thresh);
+        }
+      }
+}
+
 int main(void) {
   stdio_init_all();
 
   // sleep needed to make sure it can start on battery
   // not sure why
-  sleep_ms(100);
+  sleep_ms(200);
+
+  // launch second core
+   multicore_launch_core1(core1_main);
 
   // initialize bpm
   param_set_bpm(BPM_SAMPLED, bpm_set, beat_thresh, audio_clk_thresh);
@@ -1024,7 +1135,7 @@ int main(void) {
   sequencer.Init();
 
   // initialize save data
-  uint8_t save_data[FLASH_PAGE_SIZE];
+  //uint8_t save_data[FLASH_PAGE_SIZE];
   // // save defaults that aren't defaulted to 0
   save_data[SAVE_VOLUME] = (uint8_t)(2500 >> 8);
   save_data[SAVE_VOLUME + 1] = (uint8_t)2500;
@@ -1038,7 +1149,9 @@ int main(void) {
   // initializer trigger
   output_trigger.Init(TRIGO_PIN, 10, MAIN_LOOP_HZ);
 
+  // defined global
   // initialize control loop variables
+  /*
   uint32_t clock_ms = 0;
   uint32_t bpm_input = 165;
   uint32_t clock_hits = 0;
@@ -1053,8 +1166,9 @@ int main(void) {
   uint16_t ledarray_load = 0;
   uint32_t ledarray_binary_debounce = 0;
   uint8_t ledarray_binary = 0;
-
+  */ 
   // debouncing
+  /*
   uint16_t debounce_sample = 0;
   uint16_t debounce_lock_clock = 0;
   uint16_t debounce_reset_fx = 0;
@@ -1068,6 +1182,7 @@ int main(void) {
   bool do_load = false;
   bool first_time = false;
   bool has_loaded = false;
+  */
   RunningAverage ra;
   ra.Init(5);
 
@@ -1301,34 +1416,40 @@ int main(void) {
         }
 #endif
         // selector / bpm logic with encoder pins
-
+        // now done on core 1 with pio encoder reading
+       /*
        for (uint8_t i = 0; i <3 ; i++) {
           encoder_button[i].Read();
        }
         
-
+        bool selected = false;
         uint8_t selector_knob_before = selector_knob;
 
         if ( encoder_button[0].On() && 
                 encoder_button[2].ChangedHigh(true) &&
                 ! encoder_button[1].ChangedHigh(true) 
-                //encoder_button[1].Falling() &&
-                //! encoder_button[2].Rising() 
-           )  {
-           selector_knob = selector_knob + 1;
-           if (selector_knob > 7) selector_knob = 0;
-        } else if ( encoder_button[0].On() && 
-                encoder_button[1].ChangedHigh(true) &&
-                ! encoder_button[2].ChangedHigh(true) 
                 //encoder_button[2].Falling() &&
                 //! encoder_button[1].Rising() 
            )  {
+           selector_knob = selector_knob + 1;
+           if (selector_knob > 7) selector_knob = 0;
+           selected = true;
+        }
+
+        else if ( selected == false && encoder_button[0].On() && 
+                //encoder_button[1].ChangedHigh(true) &&
+                //! encoder_button[2].ChangedHigh(true) 
+                encoder_button[1].Falling() &&
+                ! encoder_button[2].Rising() 
+           )  {
            selector_knob = selector_knob - 1;
            if (selector_knob < 0) selector_knob = 7;
+           selected = true;
         }
+
         if ( selector_knob != selector_knob_before ) {
           ledarray_sel = selector_knob;
-          ledarray_sel_debounce = 7000;
+          ledarray_sel_debounce = 9000;
           ledarray_bar_debounce = 0;
           has_saved = false;
           sequencer.SetRecording(false);
@@ -1339,29 +1460,31 @@ int main(void) {
 
         uint16_t bpm_set_new  = bpm_set;
 
-        if ( ! encoder_button[0].On() && 
+        if ( selected == false && ! encoder_button[0].On() && 
              clock_sync_ms > 60000 &&
              encoder_button[1].ChangedHigh(true) &&
              ! encoder_button[2].ChangedHigh(true)
-             //encoder_button[1].Falling() &&
-             //encoder_button[2].Rising()
+             //encoder_button[2].Falling() &&
+             //encoder_button[1].Rising()
            ) {
            bpm_set_new  = bpm_set - 1;
            if (bpm_set_new < 60) {
                bpm_set_new = 360;
            }
-        } else if ( ! encoder_button[0].On() && 
-                   clock_sync_ms > 60000 &&
+           selected = true;
+        } else if ( selected == false && ! encoder_button[0].On() && 
+                   clock_sync_ms > 90000 &&
                    encoder_button[2].ChangedHigh(true)  &&
                    ! encoder_button[1].ChangedHigh(true)
-                   //encoder_button[2].Falling() &&
-                   //encoder_button[1].Rising()
+                   //encoder_button[1].Falling() &&
+                   //encoder_button[2].Rising()
            ) {
 
           bpm_set_new  = bpm_set + 1;
           if (bpm_set_new > 360) {
               bpm_set_new = 60;
           }
+           selected = true;
         }
 
         if (bpm_set_new != bpm_set) {
@@ -1373,6 +1496,8 @@ int main(void) {
            param_set_bpm(bpm_set_new, bpm_set, beat_thresh,
                                audio_clk_thresh);
         }
+      */
+
       }
 
       // adc reading
